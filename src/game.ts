@@ -940,7 +940,7 @@ export class Game {
     if (this.phase === 'toDock') return;
     const pick = this.phase === 'toPickup';
     const p = pick ? this.pickup : this.drop;
-    const color = pick ? '#5ce08a' : '#ff8a3d';
+    const color = pick ? '#5ce08a' : '#ff5fa2';
     const pulse = 0.5 + 0.5 * Math.sin(this.now / 230);
 
     g.fillStyle = color;
@@ -1091,7 +1091,7 @@ export class Game {
     g.closePath();
     g.fill();
     g.fillStyle =
-      this.phase === 'toPickup' ? '#5ce08a' : this.phase === 'toDrop' ? '#ff8a3d' : '#8fcaff';
+      this.phase === 'toPickup' ? '#5ce08a' : this.phase === 'toDrop' ? '#ff5fa2' : '#8fcaff';
     g.beginPath();
     g.moveTo(16, 0);
     g.lineTo(-10, 9);
