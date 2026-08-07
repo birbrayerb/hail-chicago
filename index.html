@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
+    />
+    <meta name="theme-color" content="#12151a" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta
+      name="description"
+      content="Hail Chicago — a top-down arcade taxi game. Taxi, moped, or Divvy bike. Grab fares before the clock runs out."
+    />
+    <title>Hail Chicago</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%2312151a'/%3E%3Crect x='5' y='11' width='22' height='11' rx='3' fill='%23f5c518'/%3E%3Crect x='9' y='7' width='14' height='6' rx='2' fill='%23ffe27a'/%3E%3C/svg%3E" />
+  </head>
+  <body>
+    <div id="app">
+      <canvas id="game"></canvas>
+
+      <!-- ============ HUD ============ -->
+      <div id="hud" class="hidden">
+        <div id="hud-left">
+          <div class="stat"><span class="lbl">FARES</span><span id="score" class="val">$0</span></div>
+          <div class="stat"><span class="lbl">TIME</span><span id="timer" class="val">0:00</span></div>
+          <div id="veh-chip"><span id="veh-name">TAXI</span></div>
+        </div>
+
+        <div id="hud-right">
+          <canvas id="minimap" width="240" height="240"></canvas>
+          <button id="swap-btn" class="hidden" type="button">SWAP</button>
+        </div>
+
+        <div id="objective"><span id="obj-text">FIND A FARE</span></div>
+      </div>
+
+      <!-- ============ TOUCH CONTROLS ============ -->
+      <div id="touch" class="hidden">
+        <div id="stick-zone">
+          <div id="stick-base"><div id="stick-nub"></div></div>
+        </div>
+        <div id="pedals">
+          <div id="brake" class="pedal">BRAKE</div>
+          <div id="gas" class="pedal">GAS</div>
+        </div>
+      </div>
+
+      <!-- ============ START SCREEN ============ -->
+      <div id="start" class="screen">
+        <div class="screen-inner">
+          <h1><span class="hail">HAIL</span> <span class="chi">CHICAGO</span></h1>
+          <p class="tag">Pick up fares. Beat the clock. Don't hit the pedestrians.</p>
+
+          <div class="cards">
+            <button class="card" data-veh="taxi" type="button">
+              <svg viewBox="0 0 40 64" class="card-art" aria-hidden="true">
+                <rect x="6" y="6" width="28" height="52" rx="7" fill="#f5c518" />
+                <rect x="10" y="14" width="20" height="15" rx="3" fill="#2b3038" />
+                <rect x="10" y="40" width="20" height="12" rx="3" fill="#2b3038" />
+                <rect x="12" y="1" width="16" height="7" rx="3" fill="#ffe27a" />
+              </svg>
+              <b>YELLOW TAXI</b>
+              <em>Top speed &amp; fattest fares. Handles like a couch. Traffic kills it.</em>
+            </button>
+            <button class="card" data-veh="moped" type="button">
+              <svg viewBox="0 0 40 64" class="card-art" aria-hidden="true">
+                <rect x="13" y="8" width="14" height="48" rx="7" fill="#e8532e" />
+                <circle cx="20" cy="20" r="6" fill="#2b3038" />
+                <rect x="8" y="22" width="24" height="4" rx="2" fill="#d8d8dc" />
+              </svg>
+              <b>MOPED</b>
+              <em>Rocket acceleration, razor handling, and it lane-splits straight through traffic.</em>
+            </button>
+            <button class="card" data-veh="bike" type="button">
+              <svg viewBox="0 0 40 64" class="card-art" aria-hidden="true">
+                <rect x="15" y="10" width="10" height="44" rx="5" fill="#1f7ad4" />
+                <circle cx="20" cy="17" r="7" fill="none" stroke="#0f4d8c" stroke-width="3" />
+                <circle cx="20" cy="47" r="7" fill="none" stroke="#0f4d8c" stroke-width="3" />
+              </svg>
+              <b>DIVVY BIKE</b>
+              <em>Slow, cheap — but you must dock it after every drop-off. Plan the route, bank the bonus.</em>
+            </button>
+          </div>
+
+          <p class="best">BEST: <span id="best-score">$0</span></p>
+          <p class="hint" id="start-hint">Tap a vehicle to start &middot; best played in landscape</p>
+        </div>
+      </div>
+
+      <!-- ============ GAME OVER ============ -->
+      <div id="over" class="screen hidden">
+        <div class="screen-inner">
+          <h2>SHIFT OVER</h2>
+          <div class="final" id="final-score">$0</div>
+          <div class="breakdown" id="final-lines"></div>
+          <button id="again" class="big-btn" type="button">DRIVE AGAIN</button>
+        </div>
+      </div>
+
+      <!-- ============ ROTATE NUDGE ============ -->
+      <div id="rotate" class="hidden">
+        <div class="rot-icon">📱</div>
+        <p>Turn your phone sideways</p>
+        <button id="rot-dismiss" type="button">play anyway</button>
+      </div>
+    </div>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
