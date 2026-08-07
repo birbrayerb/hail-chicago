@@ -5,6 +5,10 @@ import {
   CityNode,
   HALF,
   LAKE_X,
+  LOOP_I0,
+  LOOP_I1,
+  LOOP_J0,
+  LOOP_J1,
   N,
   ROAD,
   WORLD_H,
@@ -50,6 +54,60 @@ const PED_COLORS = ['#f0c9a0', '#d8a679', '#9c6b4a', '#f5e0c8'];
 const ASPHALT = '#3c4046';
 const SIDEWALK = '#9c9ca1';
 const LAKE = '#14507e';
+
+// ---------------------------------------------------------------- skyline
+// The Loop, in world coordinates, and the elevated line that rings it.
+const LOOP_CX = ((LOOP_I0 + LOOP_I1 + 1) / 2) * BLOCK;
+const LOOP_CY = ((LOOP_J0 + LOOP_J1 + 1) / 2) * BLOCK;
+const EL = {
+  x1: LOOP_I0 * BLOCK,
+  x2: (LOOP_I1 + 1) * BLOCK,
+  y1: LOOP_J0 * BLOCK,
+  y2: (LOOP_J1 + 1) * BLOCK,
+};
+const EL_PERIM = 2 * (EL.x2 - EL.x1 + EL.y2 - EL.y1);
+
+/** Point on the elevated loop at arc length s, running clockwise. */
+function elPoint(s: number) {
+  const w = EL.x2 - EL.x1;
+  const h = EL.y2 - EL.y1;
+  let t = ((s % EL_PERIM) + EL_PERIM) % EL_PERIM;
+  if (t < w) return { x: EL.x1 + t, y: EL.y1, a: 0 };
+  t -= w;
+  if (t < h) return { x: EL.x2, y: EL.y1 + t, a: Math.PI / 2 };
+  t -= h;
+  if (t < w) return { x: EL.x2 - t, y: EL.y2, a: Math.PI };
+  t -= w;
+  return { x: EL.x1, y: EL.y2 - t, a: -Math.PI / 2 };
+}
+
+/** Fake building height. Towers taper up toward the middle of the Loop. */
+function storeys(b: Building): number {
+  const jitter = Math.abs((b.x * 13 + b.y * 7) | 0) % 28;
+  if (!b.tall) return 14 + (jitter % 16);
+  const d = Math.hypot(b.x - LOOP_CX, b.y - LOOP_CY);
+  const core = Math.max(0, 1 - d / 780);
+  return 46 + core * core * 150 + jitter;
+}
+
+/** Painter's order: far from the camera first, so near extrusions win. */
+function rank(b: Building, cx: number, cy: number): number {
+  return (b.x - cx) ** 2 + (b.y - cy) ** 2;
+}
+
+const SHADES = new Map<string, string>();
+function shade(hex: string, f: number): string {
+  const key = hex + f;
+  const hit = SHADES.get(key);
+  if (hit) return hit;
+  const n = parseInt(hex.slice(1), 16);
+  const r = (((n >> 16) & 255) * f) | 0;
+  const gg = (((n >> 8) & 255) * f) | 0;
+  const bb = ((n & 255) * f) | 0;
+  const out = `rgb(${r},${gg},${bb})`;
+  SHADES.set(key, out);
+  return out;
+}
 
 export class Game {
   private ctx: CanvasRenderingContext2D;
@@ -181,9 +239,10 @@ export class Game {
     localStorage.setItem('hail-chicago-best', String(best));
     this.hud.setDivvy(false);
     this.hud.setSwap(null);
+    const s = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
     this.hud.showOver(this.score, [
-      `${this.fares} fares`,
-      `${this.docked} Divvy returns`,
+      s(this.fares, 'fare'),
+      s(this.docked, 'Divvy return'),
       `best streak ×${this.bestStreak || 1}`,
       `personal best $${best}`,
     ]);
@@ -617,6 +676,7 @@ export class Game {
     this.drawNodes(g, x0, y0, x1, y1);
     this.drawObjective(g);
     this.drawActors(g);
+    this.drawElevated(g, x0, y0, x1, y1);
     g.restore();
 
     this.drawPointer(g);
@@ -660,24 +720,73 @@ export class Game {
       }
     }
 
-    // buildings
+    // buildings, extruded away from the camera so the Loop reads as a skyline
     const list = this.city.visibleBuildings(x0, y0, x1, y1, this.buf);
-    g.fillStyle = 'rgba(15,17,21,0.34)';
+    list.sort((a, b) => rank(b, this.camx, this.camy) - rank(a, this.camx, this.camy));
+
+    g.fillStyle = 'rgba(15,17,21,0.3)';
+    for (const b of list) if (!b.park) g.fillRect(b.x + 4, b.y + 5, b.w, b.h);
+
     for (const b of list) {
-      const off = b.park ? 0 : b.tall ? 8 : 3;
-      if (off) g.fillRect(b.x + off, b.y + off, b.w, b.h);
-    }
-    for (const b of list) {
-      g.fillStyle = b.color;
+      if (b.park) {
+        g.fillStyle = b.color;
+        g.fillRect(b.x, b.y, b.w, b.h);
+        g.fillStyle = b.roof;
+        g.fillRect(b.x + 5, b.y + 5, b.w - 10, b.h - 10);
+        continue;
+      }
+
+      const hgt = storeys(b);
+      const px = (b.x + b.w / 2 - this.camx) * hgt * 0.0011;
+      const py = (b.y + b.h / 2 - this.camy) * hgt * 0.0011;
+
+      // ground floor
+      g.fillStyle = shade(b.color, 0.72);
       g.fillRect(b.x, b.y, b.w, b.h);
+
+      // the two facades you'd actually see from up here
+      if (px > 0.4 || px < -0.4) {
+        const edge = px > 0 ? b.x + b.w : b.x;
+        g.fillStyle = shade(b.color, 0.58);
+        g.beginPath();
+        g.moveTo(edge, b.y);
+        g.lineTo(edge + px, b.y + py);
+        g.lineTo(edge + px, b.y + b.h + py);
+        g.lineTo(edge, b.y + b.h);
+        g.fill();
+      }
+      if (py > 0.4 || py < -0.4) {
+        const edge = py > 0 ? b.y + b.h : b.y;
+        g.fillStyle = shade(b.color, py > 0 ? 0.48 : 0.86);
+        g.beginPath();
+        g.moveTo(b.x, edge);
+        g.lineTo(b.x + px, edge + py);
+        g.lineTo(b.x + b.w + px, edge + py);
+        g.lineTo(b.x + b.w, edge);
+        g.fill();
+      }
+
+      // roof
       g.fillStyle = b.roof;
-      const inset = b.tall ? 5 : 3;
-      g.fillRect(b.x + inset, b.y + inset, b.w - inset * 2, b.h - inset * 2);
-      if (b.tall && b.w > 30 && b.h > 30) {
-        g.fillStyle = 'rgba(175,200,225,0.22)';
-        g.fillRect(b.x + 9, b.y + 9, b.w - 18, 4);
-        g.fillRect(b.x + 9, b.y + b.h - 13, b.w - 18, 4);
-        g.fillRect(b.x + 9, b.y + b.h / 2 - 2, b.w - 18, 4);
+      g.fillRect(b.x + px, b.y + py, b.w, b.h);
+
+      if (b.tall && b.w > 26 && b.h > 26) {
+        g.fillStyle = 'rgba(180,205,230,0.20)';
+        g.fillRect(b.x + px + 7, b.y + py + 7, b.w - 14, 4);
+        g.fillRect(b.x + px + 7, b.y + py + b.h - 11, b.w - 14, 4);
+        g.fillStyle = 'rgba(12,15,20,0.28)';
+        g.fillRect(b.x + px + b.w * 0.34, b.y + py + b.h * 0.34, b.w * 0.32, b.h * 0.32);
+        // twin masts on the giants — the Willis silhouette, legally distinct
+        if (hgt > 150) {
+          g.strokeStyle = 'rgba(228,234,244,0.85)';
+          g.lineWidth = 2;
+          g.beginPath();
+          for (const f of [0.36, 0.64]) {
+            g.moveTo(b.x + px + b.w * f, b.y + py + b.h * 0.5);
+            g.lineTo(b.x + px * 1.34 + b.w * f, b.y + py * 1.34 + b.h * 0.5);
+          }
+          g.stroke();
+        }
       }
     }
 
@@ -712,6 +821,77 @@ export class Game {
           }
         }
       }
+    }
+  }
+
+  /**
+   * The elevated line rings the Loop. It sits above the street, so it draws
+   * last — track, columns, shadow, and a train grinding around the circuit.
+   */
+  private drawElevated(
+    g: CanvasRenderingContext2D,
+    x0: number,
+    y0: number,
+    x1: number,
+    y1: number,
+  ) {
+    if (x1 < EL.x1 - 60 || x0 > EL.x2 + 60 || y1 < EL.y1 - 60 || y0 > EL.y2 + 60) return;
+
+    const w = 26;
+    const sx = 9;
+    const sy = 12;
+    const spans: [number, number, number, number][] = [
+      [EL.x1 - w / 2, EL.y1 - w / 2, EL.x2 - EL.x1 + w, w],
+      [EL.x1 - w / 2, EL.y2 - w / 2, EL.x2 - EL.x1 + w, w],
+      [EL.x1 - w / 2, EL.y1 - w / 2, w, EL.y2 - EL.y1 + w],
+      [EL.x2 - w / 2, EL.y1 - w / 2, w, EL.y2 - EL.y1 + w],
+    ];
+
+    g.fillStyle = 'rgba(8,10,14,0.42)';
+    for (const [x, y, sw, sh] of spans) g.fillRect(x + sx, y + sy, sw, sh);
+
+    // support columns every half block
+    g.fillStyle = '#3a3d43';
+    for (let x = EL.x1; x <= EL.x2; x += BLOCK / 2) {
+      for (const y of [EL.y1, EL.y2]) g.fillRect(x - 4 + sx, y - 4 + sy, 8, 8);
+    }
+    for (let y = EL.y1; y <= EL.y2; y += BLOCK / 2) {
+      for (const x of [EL.x1, EL.x2]) g.fillRect(x - 4 + sx, y - 4 + sy, 8, 8);
+    }
+
+    g.fillStyle = '#2a2d33';
+    for (const [x, y, sw, sh] of spans) g.fillRect(x, y, sw, sh);
+    g.fillStyle = '#8e949d';
+    for (const [x, y, sw, sh] of spans) {
+      if (sw > sh) {
+        g.fillRect(x, y + 5, sw, 3);
+        g.fillRect(x, y + sh - 8, sw, 3);
+      } else {
+        g.fillRect(x + 5, y, 3, sh);
+        g.fillRect(x + sw - 8, y, 3, sh);
+      }
+    }
+
+    // the train: six cars, nose to tail
+    const head = (this.now * 0.055) % EL_PERIM;
+    for (let i = 0; i < 6; i++) {
+      const p = elPoint(head - i * 38);
+      if (p.x < x0 - 80 || p.x > x1 + 80 || p.y < y0 - 80 || p.y > y1 + 80) continue;
+      g.save();
+      g.translate(p.x, p.y);
+      g.rotate(p.a);
+      g.fillStyle = 'rgba(10,12,16,0.35)';
+      g.fillRect(-16 + sx, -9 + sy, 32, 18);
+      g.fillStyle = '#dfe3e9';
+      g.fillRect(-16, -9, 32, 18);
+      g.fillStyle = '#1f4f8c';
+      g.fillRect(-16, -9, 32, 4);
+      g.fillRect(-16, 5, 32, 4);
+      g.fillStyle = 'rgba(52,74,104,0.9)';
+      g.fillRect(-11, -3, 7, 6);
+      g.fillRect(-1, -3, 7, 6);
+      g.fillRect(9, -3, 5, 6);
+      g.restore();
     }
   }
 
